@@ -49,6 +49,18 @@ def create_event(
     return str(result)
 
 
+@tool(response_format="content")
+def is_holiday(date: str) -> str:
+    """Checks if a given date is a holiday using the holiday calendar.
+    Args:
+        date: Date in YYYY-MM-DD format.
+    Returns:
+        String indicating the name of the holiday. If not a holiday, returns ''.
+    """
+    result = calendar.is_holiday(date)
+    return str(result)
+
+
 def connect_llm(llm_config: LLMModelConfig) -> ChatCohere:
     """Connects to the Cohere LLM model using the provided configuration.
     Args:

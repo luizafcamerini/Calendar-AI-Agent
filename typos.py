@@ -9,7 +9,6 @@ class LLMModelConfig(BaseModel):
     - temperature: (Optional) Temperature setting for the model.
     - max_tokens: (Optional) Maximum number of tokens for the model response.
     """
-
     api_token: str
     model_name: str
     temperature: float | None = None

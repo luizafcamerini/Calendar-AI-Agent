@@ -32,8 +32,10 @@ class Calendar:
     def connect(self):
         """Connects to the Google Calendar API."""
         creds = None
-        if os.path.exists("token.json"):
-            creds = Credentials.from_authorized_user_file("token.json", self.scopes)
+        if os.path.exists("config/token.json"):
+            creds = Credentials.from_authorized_user_file(
+                "config/token.json", self.scopes
+            )
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
@@ -73,9 +75,10 @@ class Calendar:
     @connection_decorator
     def search_next_event(self, days: int = 30) -> str:
         """Searches for the next events in the Google Calendar.
-
         Args:
             days: Number of days to search for events (default: 30 days).
+        Returns:
+            String containing the events found or an error message.
         """
         logging.info(
             f"Searching for events in the next {days} days in the Google Calendar..."
@@ -147,25 +150,17 @@ class Calendar:
         return f"Event created: {event.get('htmlLink')}"
 
     @connection_decorator
-    def is_holiday(date: str) -> bool:
-        # date_str: 'YYYY-MM-DD'
+    def is_holiday(self, date: str) -> str:
         """Checks if a given date is a holiday using the holiday calendar.
         Args:
             date: Date in YYYY-MM-DD format.
         Returns:
-            True if the date is a holiday, False otherwise.
+            String indicating the name of the holiday. If not a holiday, returns ''.
         """
-        service = build(
-            "calendar",
-            "v3",
-            credentials=service_account.Credentials.from_service_account_file(
-                CREDENTIALS_PATH
-            ),
-        )
         time_min = f"{date}T00:00:00Z"
         time_max = f"{date}T23:59:59Z"
         events_result = (
-            service.events()
+            self.service.events()
             .list(
                 calendarId=HOLIDAY_CALENDAR_ID,
                 timeMin=time_min,
@@ -175,5 +170,5 @@ class Calendar:
             )
             .execute()
         )
-        events = events_result.get("items", [])
-        return len(events) > 0
+        events = events_result.get("items", '')
+        return str(events)

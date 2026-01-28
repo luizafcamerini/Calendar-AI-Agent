@@ -12,7 +12,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 
-def main():
+if __name__ == "__main__":
     llm_config = LLMModelConfig(
         api_token=os.getenv("COHERE_API_KEY"),
         model_name=os.getenv("MODEL_NAME"),
@@ -22,17 +22,16 @@ def main():
     agent.calendar = Calendar()
     agent.calendar.connect()
     agente = connect_llm(llm_config).bind_tools(
-        tools=[create_event, search_next_event, check_day_hour]
+        tools=[create_event, search_next_event, check_day_hour, is_holiday],
     )
 
     messages = [
         SystemMessage(
             content=f"""Você é um assistente que ajuda os usuários a gerenciar seus eventos no Google Calendar.
-            A data de hoje é {datetime.now().strftime("%Y-%m-%d")}.
-            Utilize as ferramentas disponíveis para buscar eventos, verificar horários disponíveis e criar novos eventos na agenda.
-            Caso necessário, utilize ferramentas em sequência para completar a tarefa do usuário."""
+            A data de hoje é {datetime.now().strftime("%Y-%m-%d")}. Caso o ano não for especificado em uma data, utilize o ano atual.
+            Utilize as ferramentas disponíveis para buscar eventos, verificar horários disponíveis e criar novos eventos na agenda."""
         ),
-        HumanMessage(content="Me diga os eventos no dia 8/12/2025"),
+        HumanMessage(content="Verifique se o dia 18/02 é um feriado"),
     ]
 
     res = agente.invoke(messages)
@@ -45,6 +44,7 @@ def main():
                 "search_next_event": search_next_event,
                 "check_day_hour": check_day_hour,
                 "create_event": create_event,
+                "is_holiday": is_holiday,
             }[tool_call["name"]]
 
             tool_output = selected_tool.invoke(tool_call["args"])
@@ -53,7 +53,3 @@ def main():
         res = agente.invoke(messages)
 
     print(res.content)
-
-
-if __name__ == "__main__":
-    main()
