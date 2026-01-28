@@ -141,6 +141,7 @@ class Calendar:
     @connection_decorator
     def create_event(self, summary: str, start_time: str, end_time: str) -> str:
         """Marks an event in the Google Calendar."""
+        # TODO: Add validation for date and time availability
         event = {
             "summary": summary,
             "start": {"dateTime": start_time, "timeZone": "America/Sao_Paulo"},
