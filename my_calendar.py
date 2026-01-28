@@ -5,12 +5,22 @@ import logging
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import json
+
+# Load holiday calendar configuration from JSON file
+with open("config/holiday_calendar.json", "r", encoding="utf-8") as f:
+    holiday_config = json.load(f)
+
+
+HOLIDAY_CALENDAR_ID = holiday_config["id"]
+CREDENTIALS_PATH = "config/credentials.json"
 
 
 class Calendar:
-    """Classe para interagir com o Google Calendar API."""
+    """Class to interact with Google Calendar API."""
 
     def __init__(self):
         # If modifying these scopes, delete the file token.json.
@@ -30,11 +40,11 @@ class Calendar:
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    "credentials.json", self.scopes
+                    "config/credentials.json", self.scopes
                 )
                 creds = flow.run_local_server(port=0)
             # Save the credentials for the next run
-            with open("token.json", "w") as token:
+            with open("config/token.json", "w") as token:
                 token.write(creds.to_json())
         try:
             self.service = build("calendar", "v3", credentials=creds)
@@ -52,7 +62,11 @@ class Calendar:
         def wrapper(self, *args, **kwargs):
             if not self.service:
                 self.connect()
-            return func(self, *args, **kwargs)
+            try:
+                result = func(self, *args, **kwargs)
+            finally:
+                self.disconnect()
+            return result
 
         return wrapper
 
@@ -92,33 +106,26 @@ class Calendar:
         return "\n".join(eventos_formatados)
 
     @connection_decorator
-    def check_day_hour(self, day: str, hour: str = None) -> str:
-        """Verifies if there are scheduled events on a specific day and time in the agenda."""
+    def check_day_hour(self, day: str, hour: str = "") -> str:
+        """Verifies if there are scheduled events on a specific day and time in the agenda.
+        Args:
+            day: Date in YYYY-MM-DD format.
+            hour: Time in HH:MM format (optional, defaults to checking the entire day).
+
+        Returns:
+            String containing the events found or an error message."""
         logging.info("Verifying events in the Google Calendar...")
-        if hour:
-            events_result = (
-                self.service.events()
-                .list(
-                    calendarId="primary",
-                    timeMin=day + "T" + hour + ":00Z",
-                    timeMax=day + "T" + hour + ":59Z",
-                    singleEvents=True,
-                    orderBy="startTime",
-                )
-                .execute()
+        events_result = (
+            self.service.events()
+            .list(
+                calendarId="primary",
+                timeMin=day + "T" + hour + ":00Z",
+                timeMax=day + "T" + hour + ":59Z",
+                singleEvents=True,
+                orderBy="startTime",
             )
-        else:
-            events_result = (
-                self.service.events()
-                .list(
-                    calendarId="primary",
-                    timeMin=day + "T00:00:00Z",
-                    timeMax=day + "T23:59:59Z",
-                    singleEvents=True,
-                    orderBy="startTime",
-                )
-                .execute()
-            )
+            .execute()
+        )
         events = events_result.get("items", [])
         if not events:
             return "No events found."
@@ -138,3 +145,35 @@ class Calendar:
         }
         event = self.service.events().insert(calendarId="primary", body=event).execute()
         return f"Event created: {event.get('htmlLink')}"
+
+    @connection_decorator
+    def is_holiday(date: str) -> bool:
+        # date_str: 'YYYY-MM-DD'
+        """Checks if a given date is a holiday using the holiday calendar.
+        Args:
+            date: Date in YYYY-MM-DD format.
+        Returns:
+            True if the date is a holiday, False otherwise.
+        """
+        service = build(
+            "calendar",
+            "v3",
+            credentials=service_account.Credentials.from_service_account_file(
+                CREDENTIALS_PATH
+            ),
+        )
+        time_min = f"{date}T00:00:00Z"
+        time_max = f"{date}T23:59:59Z"
+        events_result = (
+            service.events()
+            .list(
+                calendarId=HOLIDAY_CALENDAR_ID,
+                timeMin=time_min,
+                timeMax=time_max,
+                singleEvents=True,
+                orderBy="startTime",
+            )
+            .execute()
+        )
+        events = events_result.get("items", [])
+        return len(events) > 0

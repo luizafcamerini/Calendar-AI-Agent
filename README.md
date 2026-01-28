@@ -11,6 +11,7 @@ The file token.json stores the user's access and refresh tokens, and is created 
 - `main.py`: This is the entry point of the application. It initializes the agent, sets up the necessary configurations, and starts the interaction loop with the user.
 - `requirements.txt`: This file lists all the Python dependencies required to run the project. It includes libraries for interacting with the Google Calendar API, handling AI models, and other utilities.
 - `typos.py`: This file defines data models and types used in the project, such as configurations for the LLM model and other structured data representations.
+- `config/`: This directory contains configuration files, including credentials for Google Calendar API and other settings.
 
 ### What is needed to run the project:
 - Python 3.8 or higher

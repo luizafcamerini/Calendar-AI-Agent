@@ -2,9 +2,10 @@ import os, agent
 from agent import *
 from my_calendar import Calendar
 from typos import LLMModelConfig
-import logging
 from dotenv import load_dotenv
 from langchain.messages import HumanMessage, ToolMessage, SystemMessage
+from datetime import datetime
+import logging
 
 load_dotenv()
 
@@ -20,16 +21,18 @@ def main():
     )
     agent.calendar = Calendar()
     agent.calendar.connect()
-    agente = conecta_llm(llm_config).bind_tools(
-        tools=[marca_evento, busca_proximos_evento, check_dia_horario]
+    agente = connect_llm(llm_config).bind_tools(
+        tools=[create_event, search_next_event, check_day_hour]
     )
 
     messages = [
         SystemMessage(
-            content="Você é um assistente que ajuda os usuários a gerenciar seus eventos no Google Calendar. A data de hoje é "
-            + datetime.now().strftime("%Y-%m-%d")
+            content=f"""Você é um assistente que ajuda os usuários a gerenciar seus eventos no Google Calendar.
+            A data de hoje é {datetime.now().strftime("%Y-%m-%d")}.
+            Utilize as ferramentas disponíveis para buscar eventos, verificar horários disponíveis e criar novos eventos na agenda.
+            Caso necessário, utilize ferramentas em sequência para completar a tarefa do usuário."""
         ),
-        HumanMessage(content="Marque no dia 4 de março de 2042 um evento chamado 'Reunião de equipe' das 15:00 às 16:00."),
+        HumanMessage(content="Me diga os eventos no dia 8/12/2025"),
     ]
 
     res = agente.invoke(messages)
@@ -39,9 +42,9 @@ def main():
 
         for tool_call in res.tool_calls:
             selected_tool = {
-                "busca_proximos_evento": busca_proximos_evento,
-                "check_dia_horario": check_dia_horario,
-                "marca_evento": marca_evento,
+                "search_next_event": search_next_event,
+                "check_day_hour": check_day_hour,
+                "create_event": create_event,
             }[tool_call["name"]]
 
             tool_output = selected_tool.invoke(tool_call["args"])

@@ -1,10 +1,6 @@
-import os
-
-
 from langchain.tools import tool
 from langchain_cohere import ChatCohere
 from typos import LLMModelConfig
-from datetime import datetime
 
 
 calendar = None
@@ -18,7 +14,7 @@ def search_next_event(days: int) -> str:
     Returns:
         String containing the next event details or an error message.
     """
-    result = calendar.busca_proximo_evento(days)
+    result = calendar.search_next_event(days)
     return str(result)
 
 
@@ -26,12 +22,12 @@ def search_next_event(days: int) -> str:
 def check_day_hour(day: str, hour: str = "") -> str:
     """Verifies if there are scheduled events on a specific day and time in the agenda.
     Args:
-        day: Date in YYYY-MM-DD format. If not provided, call the 'dia_atual' tool to get the current date.
+        day: Date in YYYY-MM-DD format.
         hour: Time in HH:MM format (optional, defaults to checking the entire day).
     Returns:
         String containing the events found or an error message.
     """
-    result = calendar.check_dia_horario(day, hour if hour else None)
+    result = calendar.check_day_hour(day, hour if hour else "")
     return str(result)
 
 
@@ -49,11 +45,11 @@ def create_event(
     Returns:
         String with confirmation of the created event or error message
     """
-    result = calendar.marca_evento(summary, start_time, end_time)
+    result = calendar.create_event(summary, start_time, end_time)
     return str(result)
 
 
-def conect_llm(llm_config: LLMModelConfig) -> ChatCohere:
+def connect_llm(llm_config: LLMModelConfig) -> ChatCohere:
     """Connects to the Cohere LLM model using the provided configuration.
     Args:
         llm_config: Configuration object containing model details and API token.
