@@ -22,8 +22,10 @@ if __name__ == "__main__":
     agent.calendar = Calendar()
     agent.calendar.connect()
     agente = connect_llm(llm_config).bind_tools(
-        tools=[create_event, search_next_event, check_day_hour, is_holiday],
+        tools=[create_event, search_next_event, check_day_hour, is_holiday, remove_event],
     )
+
+    message = input("Digite sua pergunta sobre o Google Calendar: ")
 
     messages = [
         SystemMessage(
@@ -31,23 +33,25 @@ if __name__ == "__main__":
             A data de hoje é {datetime.now().strftime("%Y-%m-%d")}. Caso o ano não for especificado em uma data, utilize o ano atual.
             Utilize as ferramentas disponíveis para buscar eventos, verificar horários disponíveis e criar novos eventos na agenda."""
         ),
-        HumanMessage(content="Verifique se o dia 18/02 é um feriado"),
+        HumanMessage(content=message),
     ]
 
     res = agente.invoke(messages)
 
     while res.tool_calls:
         messages.append(res)
-
+        print(res.tool_calls)
         for tool_call in res.tool_calls:
             selected_tool = {
                 "search_next_event": search_next_event,
                 "check_day_hour": check_day_hour,
                 "create_event": create_event,
                 "is_holiday": is_holiday,
+                "remove_event": remove_event,
             }[tool_call["name"]]
 
             tool_output = selected_tool.invoke(tool_call["args"])
+            print(f"Tool output: {tool_output}")
             messages.append(ToolMessage(tool_output, tool_call_id=tool_call["id"]))
 
         res = agente.invoke(messages)

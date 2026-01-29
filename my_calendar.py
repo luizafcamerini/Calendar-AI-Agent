@@ -1,11 +1,10 @@
-import datetime
 import os.path
 import logging
 
+from datetime import datetime, timedelta
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import json
@@ -83,17 +82,14 @@ class Calendar:
         logging.info(
             f"Searching for events in the next {days} days in the Google Calendar..."
         )
-        now = datetime.datetime.now().isoformat() + "Z"  # 'Z' indicates UTC time
-        future = (
-            datetime.datetime.now() + datetime.timedelta(days=days)
-        ).isoformat() + "Z"
+        now = datetime.now().isoformat() + "Z"
+        future = (datetime.now() + timedelta(days=days)).isoformat() + "Z"
         events_result = (
             self.service.events()
             .list(
                 calendarId="primary",
                 timeMin=now,
                 timeMax=future,
-                maxResults=10,
                 singleEvents=True,
                 orderBy="startTime",
             )
@@ -110,45 +106,65 @@ class Calendar:
 
     @connection_decorator
     def check_day_hour(self, day: str, hour: str = "") -> str:
-        """Verifies if there are scheduled events on a specific day and time in the agenda.
+        """Verifies if there are scheduled events on one specific day and time in the agenda.
         Args:
             day: Date in YYYY-MM-DD format.
             hour: Time in HH:MM format (optional, defaults to checking the entire day).
 
         Returns:
-            String containing the events found or an error message."""
-        logging.info("Verifying events in the Google Calendar...")
+            String containing the events found or no events found."""
+        #TODO: for some reason, this method doesnt work
+        logging.info(f"Verifying events in the Google Calendar...")
+
+        if hour == "":
+            hour = "00:00"
+        next_hour = (datetime.strptime(hour, "%H:%M") + timedelta(hours=1)).strftime("%H:%M")
+        timemin = f"{day}T{hour}:00Z" if hour else f"{day}T00:00:00Z"
+        timemax = f"{day}T{next_hour}:00Z" if hour else f"{day}T23:59:59Z"
         events_result = (
             self.service.events()
             .list(
                 calendarId="primary",
-                timeMin=day + "T" + hour + ":00Z",
-                timeMax=day + "T" + hour + ":59Z",
+                timeMin=timemin,
+                timeMax=timemax,
+                maxResults=1,
                 singleEvents=True,
                 orderBy="startTime",
             )
             .execute()
         )
         events = events_result.get("items", [])
+        print(events)
         if not events:
             return "No events found."
-        formatted_events = []
-        for event in events:
-            start = event["start"].get("dateTime", event["start"].get("date"))
-            formatted_events.append(f"{start} - {event.get('summary', 'No title')}")
-        return "\n".join(formatted_events)
+        return events
 
     @connection_decorator
-    def create_event(self, summary: str, start_time: str, end_time: str) -> str:
-        """Marks an event in the Google Calendar."""
+    def create_event(self, summary: str, day: str, start_time: str, end_time: str) -> str:
+        """Marks an event in the Google Calendar.
+        Args:
+            summary: Event description.
+            day: Date in YYYY-MM-DD format.
+            start_time: Event start in HH:MM format.
+            end_time: Event end in HH:MM format.
+        Returns:
+            String with confirmation of the created event or error message."""
         # TODO: Add validation for date and time availability
+        availability = self.check_day_hour(day, start_time)
+        if availability != "No events found.":
+            return "The specified time slot is not available."
+        start_time = f"{day}T{start_time}:00"
+        end_time = f"{day}T{end_time}:00"
         event = {
             "summary": summary,
             "start": {"dateTime": start_time, "timeZone": "America/Sao_Paulo"},
             "end": {"dateTime": end_time, "timeZone": "America/Sao_Paulo"},
         }
-        event = self.service.events().insert(calendarId="primary", body=event).execute()
-        return f"Event created: {event.get('htmlLink')}"
+        try:
+            event = self.service.events().insert(calendarId="primary", body=event).execute()
+            return f"Event created: {event.get('htmlLink')}"
+        except HttpError as error:
+            return f"An error occurred: {error}"
 
     @connection_decorator
     def is_holiday(self, date: str) -> str:
@@ -171,5 +187,58 @@ class Calendar:
             )
             .execute()
         )
-        events = events_result.get("items", '')
+        events = events_result.get("items", "")
         return str(events)
+
+    @connection_decorator
+    def get_event_id(self, day: str, hour: str) -> str:
+        """Retrieves the event ID for a specific day and hour.
+        Args:
+            day: Date in YYYY-MM-DD format.
+            hour: Time in HH:MM format.
+        Returns:
+            Event ID as a string or a message indicating no events found.
+        """
+        events_result = (
+            self.service.events()
+            .list(
+                calendarId="primary",
+                timeMin=day + "T" + hour + ":00Z",
+                maxResults=1,
+                singleEvents=True,
+                orderBy="startTime",
+            )
+            .execute()
+        )
+        events = events_result.get("items", [])
+        if not events:
+            return "No events found."
+        else:
+            return events[0]['id']
+
+    @connection_decorator
+    def remove_event(self, day: str, hour: str) -> str:
+        """Removes an event from the Google Calendar.
+        Args:
+            day: Date in YYYY-MM-DD format.
+            hour: Time in HH:MM format.
+        Returns:
+            String confirming the deletion of the event or reporting an error.
+        """
+        event_id = self.get_event_id(day, hour)
+        if event_id == "No events found.":
+            return "No event found to delete."
+        else:
+            try:
+                self.service.events().delete(
+                    calendarId="primary", eventId=event_id
+                ).execute()
+                return f"Event with ID {event_id} has been deleted."
+            except HttpError as error:
+                return f"An error occurred: {error}"
+
+
+if __name__ == "__main__":
+    cal = Calendar()
+    cal.connect()
+    print(cal.check_day_hour("2026-01-29", "19:00"))

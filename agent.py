@@ -60,6 +60,18 @@ def is_holiday(date: str) -> str:
     result = calendar.is_holiday(date)
     return str(result)
 
+@tool(response_format="content")
+def remove_event(day: str, hour: str) -> str:
+    """Removes an event from the Google Calendar.
+    Args:
+        day: Date in YYYY-MM-DD format.
+        hour: Time in HH:MM format.
+    Returns:
+        String confirming the removal of the event or an error message.
+    """
+    result = calendar.remove_event(day, hour)
+    return str(result)
+
 
 def connect_llm(llm_config: LLMModelConfig) -> ChatCohere:
     """Connects to the Cohere LLM model using the provided configuration.
