@@ -1,7 +1,7 @@
 import os.path
 import logging
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -22,7 +22,6 @@ class Calendar:
     """Class to interact with Google Calendar API."""
 
     def __init__(self):
-        # If modifying these scopes, delete the file token.json.
         self.scopes = [
             "https://www.googleapis.com/auth/calendar",
         ]
@@ -72,39 +71,67 @@ class Calendar:
         return wrapper
 
     @connection_decorator
-    def search_next_event(self, days: int = 30) -> str:
-        """Searches for the next events in the Google Calendar.
+    def list_events(
+        self,
+        timeMin: str,
+        timeMax: str,
+        calendarId: str = "primary",
+        max_results: int = 1,
+        singleEvents: bool = True,
+    ) -> list:
+        """Lists the upcoming events in the specified Google Calendar.
         Args:
-            days: Number of days to search for events (default: 30 days).
+            timeMin: The time after which to list events (ISO 8601 format).
+            timeMax: The time before which to list events (ISO 8601 format).
+            calendarId: ID of the calendar to list events from (default: primary).
+            max_results: Maximum number of events to retrieve (default: 1).
+            singleEvents: Whether to expand recurring events into instances (default: True).
         Returns:
-            String containing the events found or an error message.
+            List of events found. If no events are found, returns an empty list.
         """
-        logging.info(
-            f"Searching for events in the next {days} days in the Google Calendar..."
-        )
-        now = datetime.now().isoformat() + "Z"
-        future = (datetime.now() + timedelta(days=days)).isoformat() + "Z"
         events_result = (
             self.service.events()
             .list(
-                calendarId="primary",
-                timeMin=now,
-                timeMax=future,
-                singleEvents=True,
+                calendarId=calendarId,
+                timeMin=timeMin,
+                timeMax=timeMax,
+                maxResults=max_results,
+                singleEvents=singleEvents,
                 orderBy="startTime",
             )
             .execute()
         )
         events = events_result.get("items", [])
         if not events:
-            return "No events found."
-        eventos_formatados = []
+            return []
+        return events
+
+    def stringify_events(self, events: list) -> str:
+        """Converts a list of events into a readable string format.
+        Args:
+            events: List of event objects.
+        Returns:
+            String representation of the events. If no events, returns an empty string.
+        """
+        event_strings = []
+        if not events:
+            return ""
         for event in events:
             start = event["start"].get("dateTime", event["start"].get("date"))
-            eventos_formatados.append(f"{start} - {event.get('summary', 'No title')}")
-        return "\n".join(eventos_formatados)
+            event_strings.append(f"{start}: {event.get('summary', 'No Title')}")
+        return "\n".join(event_strings)
 
-    @connection_decorator
+    def search_next_event(self, days: int = 30) -> str:
+        """Searches for the next events in the Google Calendar.
+        Args:
+            days: Number of days to search for events (default: 30 days).
+        Returns:
+            String containing the events found. If no events, returns an empty string.
+        """
+        now = datetime.now().isoformat() + "Z"
+        future = (datetime.now() + timedelta(days=days)).isoformat() + "Z"
+        return self.stringify_events(self.list_events(timeMin=now, timeMax=future))
+
     def check_day_hour(self, day: str, hour: str = "") -> str:
         """Verifies if there are scheduled events on one specific day and time in the agenda.
         Args:
@@ -112,48 +139,41 @@ class Calendar:
             hour: Time in HH:MM format (optional, defaults to checking the entire day).
 
         Returns:
-            String containing the events found or no events found."""
-        #TODO: for some reason, this method doesnt work
+            String containing the events found. If no events, returns an empty string.
+        """
+        # TODO: for some reason, this method doesnt work
         logging.info(f"Verifying events in the Google Calendar...")
-
-        if hour == "":
-            hour = "00:00"
-        next_hour = (datetime.strptime(hour, "%H:%M") + timedelta(hours=1)).strftime("%H:%M")
-        timemin = f"{day}T{hour}:00Z" if hour else f"{day}T00:00:00Z"
-        timemax = f"{day}T{next_hour}:00Z" if hour else f"{day}T23:59:59Z"
-        events_result = (
-            self.service.events()
-            .list(
-                calendarId="primary",
-                timeMin=timemin,
-                timeMax=timemax,
-                maxResults=1,
-                singleEvents=True,
-                orderBy="startTime",
-            )
-            .execute()
-        )
-        events = events_result.get("items", [])
-        print(events)
-        if not events:
-            return "No events found."
-        return events
+        if not hour:
+            start = datetime.fromisoformat(f"{day}T00:00").replace(tzinfo=timezone.utc)
+            end = start + timedelta(days=1)
+        else:
+            start = datetime.fromisoformat(f"{day}T{hour}").replace(tzinfo=timezone.utc)
+            end = start + timedelta(hours=1)
+        timemin = start.isoformat()
+        timemax = end.isoformat()
+        return self.stringify_events(self.list_events(timeMin=timemin, timeMax=timemax))
 
     @connection_decorator
-    def create_event(self, summary: str, day: str, start_time: str, end_time: str) -> str:
-        """Marks an event in the Google Calendar.
+    def create_event(
+        self, summary: str, day: str, start_time: str, end_time: str = ""
+    ) -> str:
+        """Creates an event in the Google Calendar.
         Args:
             summary: Event description.
             day: Date in YYYY-MM-DD format.
             start_time: Event start in HH:MM format.
-            end_time: Event end in HH:MM format.
+            end_time: Event end in HH:MM format (optional, default is one hour after start_time).
         Returns:
             String with confirmation of the created event or error message."""
         # TODO: Add validation for date and time availability
         availability = self.check_day_hour(day, start_time)
-        if availability != "No events found.":
+        if availability != "":
             return "The specified time slot is not available."
         start_time = f"{day}T{start_time}:00"
+        if not end_time:
+            end_time = (
+                datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S") + timedelta(hours=1)
+            ).strftime("%H:%M")
         end_time = f"{day}T{end_time}:00"
         event = {
             "summary": summary,
@@ -161,7 +181,9 @@ class Calendar:
             "end": {"dateTime": end_time, "timeZone": "America/Sao_Paulo"},
         }
         try:
-            event = self.service.events().insert(calendarId="primary", body=event).execute()
+            event = (
+                self.service.events().insert(calendarId="primary", body=event).execute()
+            )
             return f"Event created: {event.get('htmlLink')}"
         except HttpError as error:
             return f"An error occurred: {error}"
@@ -176,19 +198,11 @@ class Calendar:
         """
         time_min = f"{date}T00:00:00Z"
         time_max = f"{date}T23:59:59Z"
-        events_result = (
-            self.service.events()
-            .list(
-                calendarId=HOLIDAY_CALENDAR_ID,
-                timeMin=time_min,
-                timeMax=time_max,
-                singleEvents=True,
-                orderBy="startTime",
+        return self.stringify_events(
+            self.list_events(
+                timeMin=time_min, timeMax=time_max, calendarId=HOLIDAY_CALENDAR_ID
             )
-            .execute()
         )
-        events = events_result.get("items", "")
-        return str(events)
 
     @connection_decorator
     def get_event_id(self, day: str, hour: str) -> str:
@@ -197,24 +211,12 @@ class Calendar:
             day: Date in YYYY-MM-DD format.
             hour: Time in HH:MM format.
         Returns:
-            Event ID as a string or a message indicating no events found.
+            Event ID as a string or an empty string if no events are found.
         """
-        events_result = (
-            self.service.events()
-            .list(
-                calendarId="primary",
-                timeMin=day + "T" + hour + ":00Z",
-                maxResults=1,
-                singleEvents=True,
-                orderBy="startTime",
-            )
-            .execute()
+        event = self.list_events(
+            timeMin=day + "T" + hour + ":00Z",
         )
-        events = events_result.get("items", [])
-        if not events:
-            return "No events found."
-        else:
-            return events[0]['id']
+        return event.get("items")[0]["id"] if event else ""
 
     @connection_decorator
     def remove_event(self, day: str, hour: str) -> str:
@@ -226,7 +228,7 @@ class Calendar:
             String confirming the deletion of the event or reporting an error.
         """
         event_id = self.get_event_id(day, hour)
-        if event_id == "No events found.":
+        if event_id == "":
             return "No event found to delete."
         else:
             try:

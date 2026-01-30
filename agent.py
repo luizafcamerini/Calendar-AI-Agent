@@ -7,10 +7,10 @@ calendar = None
 
 
 @tool(response_format="content")
-def search_next_event(days: int) -> str:
+def search_next_event(days: int = 30) -> str:
     """Search for the next event in the Google Calendar within a specified number of days.
     Args:
-        days: Number of days to look ahead for the next event.
+        days: Number of days to look ahead for the next event. Default is 30 days.
     Returns:
         String containing the next event details or an error message.
     """
@@ -34,18 +34,20 @@ def check_day_hour(day: str, hour: str = "") -> str:
 @tool(response_format="content")
 def create_event(
     summary: str,
+    day: str,
     start_time: str,
-    end_time: str,
+    end_time: str = None,
 ) -> str:
     """Creates an event in the Google Calendar.
     Args:
-        summary: Event description.
-        start_time: Event start time in ISO 8601 format (YYYY-MM-DDTHH:MM:SS).
-        end_time: Event end time in ISO 8601 format (YYYY-MM-DDTHH:MM:SS).
+        summary: Event title.
+        day: Date in YYYY-MM-DD format.
+        start_time: Event start time in HH:MM format.
+        end_time: Event end time in HH:MM format (optional, default is None and it is computed as one hour after start_time).
     Returns:
-        String with confirmation of the created event or error message
+        String with confirmation of the created event or error message.
     """
-    result = calendar.create_event(summary, start_time, end_time)
+    result = calendar.create_event(summary, day, start_time, end_time)
     return str(result)
 
 
@@ -59,6 +61,7 @@ def is_holiday(date: str) -> str:
     """
     result = calendar.is_holiday(date)
     return str(result)
+
 
 @tool(response_format="content")
 def remove_event(day: str, hour: str) -> str:
