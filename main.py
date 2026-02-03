@@ -22,7 +22,13 @@ if __name__ == "__main__":
     agent.calendar = Calendar()
     agent.calendar.connect()
     agente = connect_llm(llm_config).bind_tools(
-        tools=[create_event, search_next_event, check_day_hour, is_holiday, remove_event],
+        tools=[
+            create_event,
+            search_next_event,
+            check_day_hour,
+            is_holiday,
+            remove_event,
+        ],
     )
 
     message = input("Digite sua pergunta sobre o Google Calendar: ")
@@ -40,7 +46,7 @@ if __name__ == "__main__":
 
     while res.tool_calls:
         messages.append(res)
-        print(res.tool_calls)
+        print(res.tool_calls + "\n")
         for tool_call in res.tool_calls:
             selected_tool = {
                 "search_next_event": search_next_event,
@@ -51,7 +57,7 @@ if __name__ == "__main__":
             }[tool_call["name"]]
 
             tool_output = selected_tool.invoke(tool_call["args"])
-            print(f"Tool output: {tool_output}")
+            print(f"Tool output: {tool_output} \n")
             messages.append(ToolMessage(tool_output, tool_call_id=tool_call["id"]))
 
         res = agente.invoke(messages)

@@ -76,7 +76,7 @@ class Calendar:
         timeMin: str,
         timeMax: str,
         calendarId: str = "primary",
-        max_results: int = 1,
+        max_results: int = 100,
         singleEvents: bool = True,
     ) -> list:
         """Lists the upcoming events in the specified Google Calendar.
@@ -84,7 +84,7 @@ class Calendar:
             timeMin: The time after which to list events (ISO 8601 format).
             timeMax: The time before which to list events (ISO 8601 format).
             calendarId: ID of the calendar to list events from (default: primary).
-            max_results: Maximum number of events to retrieve (default: 1).
+            max_results: Maximum number of events to retrieve (default: 100).
             singleEvents: Whether to expand recurring events into instances (default: True).
         Returns:
             List of events found. If no events are found, returns an empty list.
@@ -165,9 +165,10 @@ class Calendar:
             end_time: Event end in HH:MM format (optional, default is one hour after start_time).
         Returns:
             String with confirmation of the created event or error message."""
-        # TODO: Add validation for date and time availability
-        availability = self.check_day_hour(day, start_time)
-        if availability != "":
+        availability = not self.check_day_hour(day, start_time) and not self.is_holiday(
+            day
+        )
+        if not availability:
             return "The specified time slot is not available."
         start_time = f"{day}T{start_time}:00"
         if not end_time:
