@@ -25,9 +25,9 @@ def check_day_hour(day: str, hour: str = "") -> str:
         day: Date in YYYY-MM-DD format.
         hour: Time in HH:MM format (optional, defaults to checking the entire day).
     Returns:
-        String containing the events found or an error message.
+        String containing the events found. If no events, returns an empty string.
     """
-    result = calendar.check_day_hour(day, hour if hour else "")
+    result = calendar.check_day_hour(day, hour)
     return str(result)
 
 
@@ -45,7 +45,7 @@ def create_event(
         start_time: Event start time in HH:MM format.
         end_time: Event end time in HH:MM format (optional, default is None and it is computed as one hour after start_time).
     Returns:
-        String with confirmation of the created event or error message.
+        String with confirmation of the created event, denial to create the event or an error message.
     """
     result = calendar.create_event(summary, day, start_time, end_time)
     return str(result)
@@ -73,6 +73,20 @@ def remove_event(day: str, hour: str) -> str:
         String confirming the removal of the event or an error message.
     """
     result = calendar.remove_event(day, hour)
+    return str(result)
+
+
+@tool(response_format="content")
+def edit_event(day: str, hour: str, new_summary: str) -> str:
+    """Edits an existing event in the Google Calendar.
+    Args:
+        day: Date in YYYY-MM-DD format.
+        hour: Time in HH:MM format.
+        new_summary: New title for the event.
+    Returns:
+        String confirming the edit of the event or an error message.
+    """
+    result = calendar.edit_event(day, hour, new_summary)
     return str(result)
 
 

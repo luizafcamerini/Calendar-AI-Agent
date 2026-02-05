@@ -49,7 +49,8 @@ class Calendar:
         try:
             self.service = build("calendar", "v3", credentials=creds)
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            logging.error(f"An error occurred: {error}")
+            self.service = None
 
     def disconnect(self):
         """Disconnects from the Google Calendar API."""
@@ -57,15 +58,13 @@ class Calendar:
         self.service = None
 
     def connection_decorator(func):
-        """Decorator to ensure connection before executing API methods."""
+        """Decorator to ensure connection before executing API methods.
+        Does not disconnect after method execution."""
 
         def wrapper(self, *args, **kwargs):
             if not self.service:
                 self.connect()
-            try:
-                result = func(self, *args, **kwargs)
-            finally:
-                self.disconnect()
+            result = func(self, *args, **kwargs)
             return result
 
         return wrapper
@@ -157,14 +156,15 @@ class Calendar:
     def create_event(
         self, summary: str, day: str, start_time: str, end_time: str = ""
     ) -> str:
-        """Creates an event in the Google Calendar.
+        """Creates an event in the Google Calendar. Verifies availability before creating.
         Args:
             summary: Event description.
             day: Date in YYYY-MM-DD format.
             start_time: Event start in HH:MM format.
             end_time: Event end in HH:MM format (optional, default is one hour after start_time).
         Returns:
-            String with confirmation of the created event or error message."""
+            String with confirmation of the created event, denial to create the event or an error message.
+        """
         availability = not self.check_day_hour(day, start_time) and not self.is_holiday(
             day
         )
@@ -189,7 +189,6 @@ class Calendar:
         except HttpError as error:
             return f"An error occurred: {error}"
 
-    @connection_decorator
     def is_holiday(self, date: str) -> str:
         """Checks if a given date is a holiday using the holiday calendar.
         Args:
@@ -197,15 +196,16 @@ class Calendar:
         Returns:
             String indicating the name of the holiday. If not a holiday, returns ''.
         """
-        time_min = f"{date}T00:00:00Z"
-        time_max = f"{date}T23:59:59Z"
+        start = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end = start + timedelta(days=1) - timedelta(seconds=1)
         return self.stringify_events(
             self.list_events(
-                timeMin=time_min, timeMax=time_max, calendarId=HOLIDAY_CALENDAR_ID
+                timeMin=start.isoformat(),
+                timeMax=end.isoformat(),
+                calendarId=HOLIDAY_CALENDAR_ID,
             )
         )
 
-    @connection_decorator
     def get_event_id(self, day: str, hour: str) -> str:
         """Retrieves the event ID for a specific day and hour.
         Args:
@@ -214,8 +214,13 @@ class Calendar:
         Returns:
             Event ID as a string or an empty string if no events are found.
         """
+        start = datetime.strptime(f"{day} {hour}", "%Y-%m-%d %H:%M").replace(
+            tzinfo=timezone.utc
+        )
+        end = start + timedelta(hours=1)
         event = self.list_events(
-            timeMin=day + "T" + hour + ":00Z",
+            timeMin=start.isoformat(),
+            timeMax=end.isoformat(),
         )
         return event.get("items")[0]["id"] if event else ""
 
@@ -240,8 +245,37 @@ class Calendar:
             except HttpError as error:
                 return f"An error occurred: {error}"
 
-
-if __name__ == "__main__":
-    cal = Calendar()
-    cal.connect()
-    print(cal.check_day_hour("2026-01-29", "19:00"))
+    @connection_decorator
+    def edit_event(
+        self, day: str, hour: str, new_summary: str, location: str = ""
+    ) -> str:
+        """Edits an existing event in the Google Calendar.
+        Args:
+            day: Date in YYYY-MM-DD format.
+            hour: Time in HH:MM format.
+            new_summary: New title for the event.
+            location: New location for the event (optional).
+        Returns:
+            String confirming the update of the event or reporting an error.
+        """
+        event_id = self.get_event_id(day, hour)
+        if event_id == "":
+            return "No event found to edit."
+        else:
+            try:
+                event = (
+                    self.service.events()
+                    .get(calendarId="primary", eventId=event_id)
+                    .execute()
+                )
+                event["summary"] = new_summary
+                if location:
+                    event["location"] = location
+                updated_event = (
+                    self.service.events()
+                    .update(calendarId="primary", eventId=event_id, body=event)
+                    .execute()
+                )
+                return f"Event updated: {updated_event.get('htmlLink')}"
+            except HttpError as error:
+                return f"An error occurred: {error}"
